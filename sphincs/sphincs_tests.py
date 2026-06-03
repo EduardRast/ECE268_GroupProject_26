@@ -1,4 +1,10 @@
+from time import perf_counter
+import timeit
+from functools import wraps
+
 from sphincs_cpu import SPHINCS
+
+
 
 
 def sphincs_test(msg: str):
@@ -28,8 +34,9 @@ def main():
     """
 
     print('Running basic SPHINCS test:')
-    sphincs_test('Test message for SPHINCS+ implementation.')
-
+    # sphincs_test('Test message for SPHINCS+ implementation.')
+    execution_time = timeit.timeit(lambda: sphincs_test('Test message for SPHINCS+ implementation.'), number=1)
+    print('Runtime: {:.5f} seconds'.format(execution_time))
 
 
 if __name__ == "__main__":
