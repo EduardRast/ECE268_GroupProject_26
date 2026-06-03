@@ -1,18 +1,14 @@
-from time import perf_counter
 import timeit
-from functools import wraps
 
-from sphincs_cpu import SPHINCS
-
+from sphincs_cpu import SPHINCS_CPU
 
 
-
-def sphincs_test(msg: str):
+def sphincs_cpu_test(msg: str):
     """
     Tests the basic functionality 
     """
 
-    sphincs = SPHINCS()
+    sphincs = SPHINCS_CPU()
 
     # Generate key pair (secret key and public key)
     sk, pk = sphincs.keygen()
@@ -33,10 +29,9 @@ def main():
     The main function that executes the entire script
     """
 
-    print('Running basic SPHINCS test:')
-    # sphincs_test('Test message for SPHINCS+ implementation.')
-    execution_time = timeit.timeit(lambda: sphincs_test('Test message for SPHINCS+ implementation.'), number=1)
-    print('Runtime: {:.5f} seconds'.format(execution_time))
+    print('Running basic SPHINCS CPU test:')
+    cpu_runtime = timeit.timeit(lambda: sphincs_cpu_test('Test message for SPHINCS+ implementation.'), number=1)
+    print('Runtime: {:.5f} seconds'.format(cpu_runtime))
 
 
 if __name__ == "__main__":

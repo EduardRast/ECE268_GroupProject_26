@@ -1,5 +1,5 @@
 """
-Main SPHINC CPU Implementation
+Main SPHINCS GPU Implementation
 
 Code heavily inspired by https://github.com/tottifi/sphincs-python/tree/master
 """
@@ -125,7 +125,7 @@ def base_w(x, w, out_len):
     return base_w
 
 
-class SPHINCS_CPU():
+class SPHINCS():
     """
     The SPHINCS Class
     """
@@ -353,19 +353,6 @@ class SPHINCS_CPU():
 
         return tmp
 
-    # # Input: secret seed SK.seed, address ADRS
-    # # Output: WOTS+ private key sk
-    # def wots_sk_gen(self, sec_seed, addr: ADDR):  # Not necessary
-    #     """
-        
-    #     """
-
-    #     sk = []
-    #     for i in range(0, self._len0):
-    #         addr.set_chain_addr(i)
-    #         addr.set_hash_addr(0)
-    #         sk.append(prf(sec_seed, addr.copy(), self._n))
-    #     return sk
 
     # Input: secret seed SK.seed, address ADRS, public seed PK.seed
     # Output: WOTS+ public key pk
