@@ -115,5 +115,3 @@ def main():
     print("Valid:", valid)
 
 
-if __name__ == "__main__":
-    main()

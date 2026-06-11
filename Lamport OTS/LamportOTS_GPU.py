@@ -105,5 +105,3 @@ def main():
     valid = verify(tampered_message, signature_gpu, public_key_gpu)
     print("Valid:", valid)
 
-if __name__ == "__main__":
-    main()
