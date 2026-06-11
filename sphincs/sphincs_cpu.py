@@ -52,9 +52,19 @@ def prf(sec_seed: bytes, addr: ADDR, digest_size: int) -> bytes:
     return random.randint(0, 256 ** digest_size - 1).to_bytes(digest_size, byteorder='big')
 
 
-def hash_message(r, pub_seed, pub_root, data, digest_size):
+def hash_message(r: bytes, pub_seed: bytes, pub_root: bytes, data: bytes, digest_size: int) -> bytes:
     """
-    
+    Generates the randomized message digest, expanding if needed
+
+    Parameters:
+        r (bytes):          the randomized salt value generated from prf_message
+        pub_seed (bytes):   the public seed component of the public key
+        pub_root (bytes):   the public root of the top-most XMSS tree
+        data (bytes):       the actual message payload being signed
+        digest_size (int):  the total target length of the final message digest string
+
+    Returns:
+        (bytes):    the message digest used to parse tree and leaf targets
     """
 
     hasher = hashlib.sha256()
@@ -81,18 +91,30 @@ def hash_message(r, pub_seed, pub_root, data, digest_size):
 
     return hash_out
 
-def prf_message(sec_seed, opt, m, digest_size):
+def prf_message(sec_seed: bytes, opt: bytes, m: bytes, digest_size: int) -> bytes:
     """
-    
+    Derives a pseudorandom value R used to randomize message hashing phase
+
+    Parameters:
+        sec_seed (bytes):   the secret seed dedicated to PRF expansions.
+        opt (bytes):        optional random string or salt value
+        m (bytes):          the message payload byte array
+        digest_size (int):  the required byte-length of random parameter R.
+
+    Returns:
+        (bytes):    pseudorandom byte string mapping to value R.
     """
 
     random.seed(int.from_bytes(sec_seed + opt + hash_message(b'0', b'0', b'0', m, digest_size * 2), 'big'))
     return random.randint(0, 256 ** digest_size - 1).to_bytes(digest_size, byteorder='big')
 
 
-def print_bytes_bit(data):
+def print_bytes_bit(data: bytes):
     """
-    
+    Deconstructs byte array and prints its raw bit-representation array to stdout
+
+    Parameters:
+        data (bytes):   the binary byte string to parse and print
     """
 
     arr = []
@@ -102,9 +124,17 @@ def print_bytes_bit(data):
     print(arr)
 
 
-def base_w(x, w, out_len):
+def base_w(x: bytes, w: int, out_len: int) -> list[int]:
     """
-    
+    Converts a binary byte array into an array of base-w chunk integers
+
+    Parameters:
+        x (bytes):  the input byte sequence to transform
+        w (int):    the Winternitz parameter base width (typically 16)
+        out_len (int):  the target length of the parsed base-w integer array
+
+    Returns:
+        (list[int]):    an array containing the calculated integer coefficients for the WOTS chains
     """
 
     v_in = 0
@@ -174,7 +204,7 @@ class SPHINCS_CPU():
         return sk0, pk0
 
 
-    def sign(self, msg, sk) -> bytes:
+    def sign(self, msg: bytes, sk: bytes) -> bytes:
         """
         Sign the message with the SPHINCS scheme
 
@@ -201,7 +231,7 @@ class SPHINCS_CPU():
         return sig
 
 
-    def verify(self, msg, sig, pk):
+    def verify(self, msg: bytes, sig: bytes, pk: bytes) -> bool:
         """
         Verify the signature against the message and public key
 
@@ -309,20 +339,57 @@ class SPHINCS_CPU():
 
     # UTILS
 
-    def sig_wots_from_sig_xmss(self, sig):
+    def sig_wots_from_sig_xmss(self, sig: list[bytes]) -> list[bytes]:
+        """
+        Extracts WOTS+ signature component from XMSS signature block
+
+        Parameters:
+            sig (list[bytes]):  the complete XMSS signature array
+
+        Return:
+            (list[bytes]):  the initial slice containing the WOTS+ signature chains
+        """
         return sig[0:self._len0]
 
-    def auth_from_sig_xmss(self, sig):
+    def auth_from_sig_xmss(self, sig: list[bytes]) -> list[bytes]:
+        """
+        Extracts Merkle authentication path from XMSS signature block
+
+        Parameters:
+            sig (list[bytes]):  the complete XMSS signature array
+
+        Return:
+            list[bytes]:    the remaining slice representing sibling nodes of authentication path
+        """
         return sig[self._len0:]
 
-    def sigs_xmss_from_sig_ht(self, sig):
+    def sigs_xmss_from_sig_ht(self, sig: list[bytes]) -> list[list[bytes]]:
+        """Deconstructs full Hypertree signature into XMSS signatures
+
+        Parameters:
+            sig (list[bytes]):  the global hypertree signature block
+
+        Return:
+            (list[list[bytes]]: array of nested slices, where each element is an XMSS signature
+        """
+
         sigs = []
         for i in range(0, self._d):
             sigs.append(sig[i * (self._h_p + self._len0):(i + 1) * (self._h_p + self._len0)])
 
         return sigs
 
-    def auths_from_sig_fors(self, sig):
+    def auths_from_sig_fors(self, sig: list[bytes]):
+        """
+        Parses raw FORS signature array to extract SKs and auth paths for each tree
+
+        Parameters:
+            sig (list[bytes]):  the serialized FORS signature block
+
+        Return:
+            list[list[[bytes, List[bytes]]]]:   structured array where each element contains 
+                                                [secret_key, auth_path_nodes] for a FORS tree
+        """
         sigs = []
         for i in range(0, self._k):
             sigs.append([])
@@ -333,11 +400,19 @@ class SPHINCS_CPU():
 
     # WOTS+
 
-    # Input: Input string X, start index i, number of steps s, public seed PK.seed, address ADRS
-    # Output: value of F iterated s times on X
-    def chain(self, x, i, s, pub_seed, addr: ADDR):
+    def chain(self, x: bytes, i: int, s: int, pub_seed: bytes, addr: ADDR):
         """
-        
+        Computes Winternitz hash chain by iteratively applying F (SHA-256)
+
+        Parameters:
+            x (bytes):  the starting input string state
+            i (int):    the  starting index step within chain
+            s (int):    the number of hashing iterations to perform
+            pub_seed (bytes):   the global public seed used to salt addresses
+            addr (ADDR):    the tracking address block configuration object
+
+        Return:
+            [bytes, int]: The final iterated node value as bytes, or -1 if the requested step overflows parameters.
         """
 
         if s == 0:
@@ -353,23 +428,20 @@ class SPHINCS_CPU():
 
         return tmp
 
-    # # Input: secret seed SK.seed, address ADRS
-    # # Output: WOTS+ private key sk
-    # def wots_sk_gen(self, sec_seed, addr: ADDR):  # Not necessary
-    #     """
-        
-    #     """
 
-    #     sk = []
-    #     for i in range(0, self._len0):
-    #         addr.set_chain_addr(i)
-    #         addr.set_hash_addr(0)
-    #         sk.append(prf(sec_seed, addr.copy(), self._n))
-    #     return sk
+    def wots_keygen(self, sec_seed: bytes, pub_seed: bytes, addr: ADDR) -> tuple[list[bytes]]:
+        """
+        Generates WOTS+ key pair for given address block
 
-    # Input: secret seed SK.seed, address ADRS, public seed PK.seed
-    # Output: WOTS+ public key pk
-    def wots_keygen(self, sec_seed, pub_seed, addr: ADDR):
+        Parameters:
+            sec_seed (bytes):   the master secret seed string used to derive secret keys
+            pub_seed (bytes):   the global public seed used to salt chain operations
+            addr (ADDR):    the tracking address block configuration object
+
+        Return:
+            (tuple[list[bytes], bytes]):    tuple of (array of derived SKs, final compressed PK)
+        """
+
         wots_pk_addr = addr.copy()
         tmp = bytes()
         for i in range(0, self._len0):
@@ -391,9 +463,22 @@ class SPHINCS_CPU():
 
         return sk, pk
 
-    # Input: Message M, secret seed SK.seed, public seed PK.seed, address ADRS
+    # Input: Message M, secret seed SK.seed, public seed PK.seed, address ADDR
     # Output: WOTS+ signature sig
-    def wots_sign(self, m, sec_seed, pub_seed, addr: ADDR):
+    def wots_sign(self, m: bytes, sec_seed: bytes, pub_seed: bytes, addr: ADDR) -> list[bytes]:
+        """
+        Computes WOTS+ signature for input message, embedding a Winternitz checksum chain
+
+        Parameters:
+            m (bytes):  the target message string to sign
+            sec_seed (bytes):   the master secret seed used to derive base key states
+            pub_seed (bytes):   the global public seed used to salt signature chains
+            addr (ADDR):    the tracking address block configuration object
+
+        Return:
+            (list[bytes]): The complete array of signature chain nodes representing the signed message.
+        """
+
         csum = 0
 
         msg = base_w(m, self._w, self._len1)
@@ -416,7 +501,19 @@ class SPHINCS_CPU():
 
         return sig
 
-    def wots_pk_from_sig(self, sig, m, pub_seed, addr: ADDR):
+    def wots_pk_from_sig(self, sig: list[bytes], m: bytes, pub_seed: bytes, addr: ADDR) -> bytes:
+        """
+        Reconstructs original WOTS+ public key state using a signature and its message
+
+        Parameters:
+            sig (list[bytes]):  the array of signature chain nodes
+            m (bytes):  the signed message payload
+            pub_seed (bytes):   the global public seed component
+            addr (ADDR):    the tracking address block configuration object
+
+        Return:
+            (bytes):    the recovered compressed public key string
+        """
         csum = 0
         wots_pk_addr = addr.copy()
 
@@ -441,12 +538,23 @@ class SPHINCS_CPU():
         pk_sig = sha256(pub_seed, wots_pk_addr, tmp, self._n)
         return pk_sig
 
+# ==========================================
     # XMSS
-    # =================================================
+    # ==========================================
 
-    # Input: Secret seed SK.seed, start index s, target node height z, public seed PK.seed, address ADRS
-    # Output: n-byte root node - top node on Stack
-    def treehash(self, sec_seed, s, z, pub_seed, addr: ADDR):
+    def treehash(self, sec_seed: bytes, s: int, z: int, pub_seed: bytes, addr: ADDR) -> Union[bytes, int]:
+        """Builds a local Merkle subtree using a stack-based optimization to generate a root node.
+
+        Parameters:
+            sec_seed (bytes): The master secret seed string used for WOTS+ leaf key generation.
+            s (int): The absolute starting leaf index of the target subtree.
+            z (int): The target node height of the root of the subtree.
+            pub_seed (bytes): The global public seed used to salt the tree nodes.
+            addr (ADDR): The tracking address block configuration object.
+
+        Return:
+            Union[bytes, int]: The calculated n-byte root node of the subtree, or -1 if parameters are misaligned.
+        """
         if s % (1 << z) != 0:
             return -1
 
@@ -474,15 +582,33 @@ class SPHINCS_CPU():
 
         return stack.pop()['node']
 
-    # Input: Secret seed SK.seed, public seed PK.seed, address ADRS
-    # Output: XMSS public key PK
-    def xmss_pk_gen(self, sec_seed, pub_key, addr: ADDR):
+    def xmss_pk_gen(self, sec_seed: bytes, pub_key: bytes, addr: ADDR) -> bytes:
+        """Generates an XMSS public key root for a given tree structure layer.
+
+        Parameters:
+            sec_seed (bytes): The master secret seed string.
+            pub_key (bytes): The global public seed component.
+            addr (ADDR): The tracking address block configuration object.
+
+        Return:
+            bytes: The single n-byte master public key root for this XMSS tree.
+        """
         pk = self.treehash(sec_seed, 0, self._h_p, pub_key, addr.copy())
         return pk
 
-    # Input: n-byte message M, secret seed SK.seed, index idx, public seed PK.seed, address ADRS
-    # Output: XMSS signature SIG_XMSS = (sig || AUTH)
-    def xmss_sign(self, m, sec_seed, idx, pub_seed, addr: ADDR):
+    def xmss_sign(self, m: bytes, sec_seed: bytes, idx: int, pub_seed: bytes, addr: ADDR) -> List[bytes]:
+        """Generates an XMSS signature consisting of a WOTS+ signature combined with a Merkle authentication path.
+
+        Parameters:
+            m (bytes): The n-byte message payload to be signed by the leaf.
+            sec_seed (bytes): The master secret seed string.
+            idx (int): The absolute index of the leaf within the tree doing the signing.
+            pub_seed (bytes): The global public seed component.
+            addr (ADDR): The tracking address block configuration object.
+
+        Return:
+            List[bytes]: The complete concatenated XMSS signature containing the WOTS+ signature followed by the AUTH path nodes.
+        """
         auth = []
         for j in range(0, self._h_p):
             ki = math.floor(idx // 2 ** j)
@@ -500,9 +626,19 @@ class SPHINCS_CPU():
         sig_xmss = sig + auth
         return sig_xmss
 
-    # Input: index idx, XMSS signature SIG_XMSS = (sig || AUTH), n-byte message M, public seed PK.seed, address ADRS
-    # Output: n-byte root value node[0]
-    def xmss_pk_from_sig(self, idx, sig_xmss, m, pub_seed, addr: ADDR):
+    def xmss_pk_from_sig(self, idx: int, sig_xmss: list[bytes], m: bytes, pub_seed: bytes, addr: ADDR) -> bytes:
+        """Reconstructs n-byte root value of XMSS tree from a signature, message, and auth path
+
+        Parameters:
+            idx (int):  the absolute index of signing leaf inside tree
+            sig_xmss (list[bytes]): the complete XMSS signature block containing WOTS+ data and auth path
+            m (bytes):  the original n-byte message that was signed
+            pub_seed (bytes):   the global public seed component
+            addr (ADDR):    the tracking address block configuration object
+
+        Return:
+            bytes: The calculated n-byte master root value of the evaluated tree.
+        """
         addr.set_type(ADDR.WOTS_HASH)
         addr.set_key_pair_addr(idx)
         sig = self.sig_wots_from_sig_xmss(sig_xmss)
@@ -526,9 +662,8 @@ class SPHINCS_CPU():
             node0 = node1
 
         return node0
-
+    
     # HYPERTREE XMSS
-    # =================================================
 
     # Input: Private seed SK.seed, public seed PK.seed
     # Output: HT public key PK_HT
@@ -595,7 +730,7 @@ class SPHINCS_CPU():
 
     # FORS
 
-    # Input: secret seed SK.seed, address ADRS, secret key index idx = it+j
+    # Input: secret seed SK.seed, address ADDR, secret key index idx = it+j
     # Output: FORS private key sk
     def fors_sk_gen(self, sec_seed, addr: ADDR, idx):
         addr.set_tree_height(0)
@@ -604,7 +739,7 @@ class SPHINCS_CPU():
 
         return sk
 
-    # Input: Secret seed SK.seed, start index s, target node height z, public seed PK.seed, address ADRS
+    # Input: Secret seed SK.seed, start index s, target node height z, public seed PK.seed, address ADDR
     # Output: n-byte root node - top node on Stack
     def fors_treehash(self, sec_seed, s, z, pub_seed, addr: ADDR):
         if s % (1 << z) != 0:
@@ -633,7 +768,7 @@ class SPHINCS_CPU():
 
         return stack.pop()['node']
 
-    # Input: Secret seed SK.seed, public seed PK.seed, address ADRS
+    # Input: Secret seed SK.seed, public seed PK.seed, address ADDR
     # Output: FORS public key PK
     def fors_pk_gen(self, sec_seed, pub_seed, addr: ADDR):
         fors_pk_addr = addr.copy()
@@ -647,7 +782,7 @@ class SPHINCS_CPU():
         pk = sha256(pub_seed, fors_pk_addr, root, self._n)
         return pk
 
-    # Input: Bit string M, secret seed SK.seed, address ADRS, public seed PK.seed
+    # Input: Bit string M, secret seed SK.seed, address ADDR, public seed PK.seed
     # Output: FORS signature SIG_FORS
     def fors_sign(self, m, sec_seed, pub_seed, addr):
         m_int = int.from_bytes(m, 'big')
@@ -675,7 +810,7 @@ class SPHINCS_CPU():
 
         return sig_fors
 
-    # Input: FORS signature SIG_FORS, (k lg t)-bit string M, public seed PK.seed, address ADRS
+    # Input: FORS signature SIG_FORS, (k lg t)-bit string M, public seed PK.seed, address ADDR
     # Output: FORS public key
     def fors_pk_from_sig(self, sig_fors, m, pub_seed, addr: ADDR):
         m_int = int.from_bytes(m, 'big')
@@ -717,7 +852,6 @@ class SPHINCS_CPU():
         return pk
 
     # SPHINCS IMPLEMENTATION
-    # =================================================
 
     # Input: (none)
     # Output: SPHINCS+ key pair (SK,PK)
